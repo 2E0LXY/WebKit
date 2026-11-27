@@ -1,0 +1,40 @@
+name: Independent Windows WebKit
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/independent-windows.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Check build environment
+        shell: pwsh
+        run: |
+          git rev-parse HEAD
+          Get-PSDrive C
+          perl -v
+          cmake --version
+          ninja --version
+          python --version
+          if (-not $env:VCPKG_INSTALLATION_ROOT) { throw 'Missing vcpkg installation' }
+          "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+      - name: Build upstream Windows port
+        shell: pwsh
+        run: |
+          perl Tools/Scripts/build-webkit --win --release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify MiniBrowser output
+        shell: pwsh
+        run: |
+          $browser = Get-ChildItem WebKitBuild -Recurse -Filter MiniBrowser.exe | Select-Object -First 1
+          if (-not $browser) { throw 'MiniBrowser executable missing' }
+          Get-FileHash $browser.FullName -Algorithm SHA256
